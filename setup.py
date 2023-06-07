@@ -8,6 +8,8 @@ with open("README.md", "r") as fh:
 
 INSTALL_REQUIRES = [
     "prototorch>=0.7.4",
+    "prototorch_models>=0.5.4",
+    "pytorch-lightning",
     "scipy",
     "torch-kmeans"
 ]
@@ -15,7 +17,7 @@ INSTALL_REQUIRES = [
 
 setup(
     name="counterprop_prototorch",
-    version="1.0.2",
+    version="1.0.3",
     description="Counter Propagation based on "
     "Prototorch. ",
     long_description=long_description,
