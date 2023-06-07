@@ -3,8 +3,35 @@ from typing import Callable
 import torch
 from prototorch.core.distances import squared_euclidean_distance
 from prototorch.core.initializers import AbstractComponentsInitializer
+from torch_kmeans import KMeans
 
 from counterpropagation.utils import neighbourhood_fun
+
+
+class KMeans_Initializer(AbstractComponentsInitializer):
+    ## uses https://pypi.org/project/torch-kmeans/
+    def __init__(
+            self,
+            hparams,
+            data: torch.Tensor,
+            noise: float = 0.0,
+            transform: Callable = torch.nn.Identity(),
+    ):
+        self.data = data
+        self.noise = noise
+        self.transform = transform
+        self.model = KMeans(**hparams)
+    
+    def generate_end_hook(self, center):
+        drift = torch.rand_like(center) * self.noise
+        components = self.transform(center + drift)
+        return components
+
+    def generate(self, num_components=None):
+        model_result = self.model(self.data.unsqueeze(0))
+        centers = model_result.centers.squeeze()
+        components = self.generate_end_hook(centers)
+        return components
 
 
 class ResponseLikeInitializer(AbstractComponentsInitializer):
@@ -15,11 +42,14 @@ class ResponseLikeInitializer(AbstractComponentsInitializer):
     A corresponding generate funvtion needs to be created 
     for the respective response-space.
 
+    For good initializations x should be equal or close 
+    to the response space.
     """
 
-    def __init__(self, x_train = None, noise: float = 0.0, transform: Callable = torch.nn.Identity()):
+    def __init__(self, x, response_protos, noise: float = 0.0, transform: Callable = torch.nn.Identity()):
         super(ResponseLikeInitializer, self).__init__()
-        self.x = x_train
+        self.x = x
+        self.res_protos = response_protos
         self.noise = noise
         self.transform = transform
 
@@ -39,19 +69,21 @@ class NGRInitializer(ResponseLikeInitializer):
 
     """
 
-    def __init__(self, res_dim, lmbda: float = 1., **kwargs):
+    def __init__(self, lmbda: float = 1., **kwargs):
         super(NGRInitializer, self).__init__(**kwargs)
 
-        self.res_dim = res_dim
         self.lmbda = lmbda
-
+    
     def generate(self, num_components):
-        inds = torch.LongTensor(self.res_dim).random_(0, len(self.x))
-        res_proto_samples = self.x[inds]
-        distances = squared_euclidean_distance(self.x, res_proto_samples)
-        response = neighbourhood_fun(distances, self.lmbda) * distances
-        sup_inds = torch.LongTensor(num_components).random_(0, len(self.x))
-        sup_proto_samples = response[sup_inds]
-        return self.generate_end_hook(sup_proto_samples)
+        dists = squared_euclidean_distance(self.x, self.res_protos)
+        response = neighbourhood_fun(dists, self.lmbda) * dists
+        protos = torch.empty((num_components, response.shape[1]))
+        for i in range(num_components):
+            inds = torch.LongTensor(num_components).random_(0, len(self.x))
+            protos[i] = torch.mean(response[inds], 0)
+        return self.generate_end_hook(protos)
+        
 
+RELI = ResponseLikeInitializer
 NGRI = NGRInitializer
+KMEI = KMeans_Initializer

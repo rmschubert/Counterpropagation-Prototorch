@@ -3,48 +3,51 @@ from typing import Optional
 import torch
 from pytorch_lightning.callbacks import Callback
 
+NG_DECAY = dict( 
+    exp="Exponential decay of the form lambda ^ decay_constant",
+    mul="Multiplicative decay of the form lambda * decay_constant"
+)
+DESCRIPTION = "Decay Options are:\n" + "\n".join([f"{k} - {v}" for (k, v) in NG_DECAY.items()])
 
 class NGCallback(Callback):
     """
 
-    Callback for the schedule of the neighbourhood-range lambda in Neural Gas
+    Callback for the schedule of the neighborhood-range lambda in Neural Gas
 
     """
-    def __init__(self, end_lmbda: Optional[float] = None):
+    def __init__(self, lmbda_start: Optional[float] = 1., gamma: float = 0.99, decay_type: str = "exp"):
         super(NGCallback, self).__init__()
 
-        ## end_lmbda determines on which value lmbda is set at the end of the training
-        ## if None the value given to the NG Layer is used instead
-        if end_lmbda is None:
-            self.end_lmbda = end_lmbda
+        if lmbda_start is None:
+            self.lmbda = lmbda_start
         else:
-            self.end_lmbda = torch.Tensor([end_lmbda])
+            self.lmbda_start = torch.Tensor([lmbda_start])
     
-    def new_lmbda(self, l, x):
-        """
+        assert decay_type in NG_DECAY, print(DESCRIPTION)
+        self.decay_type = decay_type
+        decay_funs = dict( 
+            exp=self.exp_decay,
+            mul=self.mul_decay,
+        )
+        self.decay_fun = decay_funs[self.decay_type]
 
-        returns new lambda based on epochs, exponential decrease
+        assert gamma <= 1. and gamma > 0., "gamma must be less or equal 1. and positive."
+        self.gamma = gamma
+    
+    def exp_decay(self, l):
+        return l ** self.gamma
 
-        Args:
-            l (FloatTensor): old lambda
-            x (float): power of lambda depending on epochs
-
-        Returns:
-            FloatTensor: new lambda
-
-        """
-        return l**x
+    def mul_decay(self, l):
+        return l * self.gamma
     
     def on_train_epoch_end(self, trainer, pl_module) -> None:
         sd = pl_module.res_layer.state_dict()
-        if self.end_lmbda is None:
+        if self.lmbda_start is None:
             l = sd["lmbda"]
         else:
-            l = self.end_lmbda
+            l = self.lmbda_start
         
-        x = trainer.current_epoch / trainer.max_epochs
-        new_l = self.new_lmbda(l, x)
-        sd["lmbda"] = new_l
+        sd["lmbda"] = self.decay_fun(l)
         pl_module.res_layer.load_state_dict(sd)
 
 

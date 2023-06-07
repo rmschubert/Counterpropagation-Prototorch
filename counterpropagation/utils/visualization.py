@@ -19,7 +19,8 @@ class VisCP2D(Vis2DAbstract):
 
     def visualize(self, pl_module):
         with torch.no_grad():
-            protos, plabel = pl_module.sup_layer.proto_layer()
+            _, plabel = pl_module.ops_layer.proto_layer()
+            protos = pl_module.ops_protos
             response = pl_module.res_layer(self.x_train)
             predictions = pl_module.predict((self.x_train, self.y_train))
             ax = self.setup_ax()
