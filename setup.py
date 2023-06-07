@@ -15,7 +15,7 @@ INSTALL_REQUIRES = [
 
 setup(
     name="counterprop_prototorch",
-    version="1.0.1",
+    version="1.0.2",
     description="Counter Propagation based on "
     "Prototorch. ",
     long_description=long_description,
